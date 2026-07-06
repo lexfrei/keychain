@@ -50,6 +50,19 @@ func main() {
 }
 ```
 
+## Configuration and logging
+
+The package-level functions use a silent default. For a logger or a non-default access mode, build a `Keychain` with `New` and call its methods:
+
+```go
+logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
+kc := keychain.New(keychain.WithLogger(logger))
+
+_ = kc.Set("myapp", "alice", []byte("s3cr3t"))
+```
+
+The library emits nothing unless you pass `WithLogger`. Debug lines record the backend, the lookup key, and payload length — never the secret value.
+
 ## Access-control model per platform
 
 | Platform | Store | Default read scope | Rebuild-safe | Size limit |

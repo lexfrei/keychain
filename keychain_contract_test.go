@@ -38,7 +38,7 @@ func (f *fakeBackend) set(service, account string, secret []byte, _ config) erro
 	return nil
 }
 
-func (f *fakeBackend) get(service, account string) ([]byte, error) {
+func (f *fakeBackend) get(service, account string, _ config) ([]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -55,7 +55,7 @@ func (f *fakeBackend) get(service, account string) ([]byte, error) {
 	return out, nil
 }
 
-func (f *fakeBackend) del(service, account string) error {
+func (f *fakeBackend) del(service, account string, _ config) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
