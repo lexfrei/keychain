@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "github>lexfrei/renovate-config"
+  ],
+  "labels": [
+    "area/dependencies"
+  ],
+  "platformAutomerge": true,
+  "automergeStrategy": "squash",
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodUpdateImportPaths"
+  ],
+  "packageRules": [
+    {
+      "description": "Automerge minor and patch updates",
+      "matchUpdateTypes": ["minor", "patch", "pin", "digest"],
+      "automerge": true
+    },
+    {
+      "description": "Automerge all GitHub Actions updates including major",
+      "matchManagers": ["github-actions"],
+      "automerge": true
+    },
+    {
+      "description": "Allow Renovate to bump go directive in go.mod",
+      "matchManagers": ["gomod"],
+      "matchDepNames": ["go"],
+      "matchDepTypes": ["golang"],
+      "rangeStrategy": "bump"
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update Go version in GitHub Actions",
+      "fileMatch": ["^\\.github/workflows/.*\\.ya?ml$"],
+      "matchStrings": ["go-version:\\s*['\"]?(?<currentValue>[\\d.]+)['\"]?"],
+      "depNameTemplate": "golang",
+      "datasourceTemplate": "golang-version"
+    }
+  ]
+}
