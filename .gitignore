@@ -1,0 +1,14 @@
+# Test and coverage artifacts
+coverage.out
+coverage.html
+*.test
+*.out
+
+# Editor / OS cruft
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Go build output (this is a library; no binaries expected, but just in case)
+/dist/

@@ -1,0 +1,11 @@
+# Normalize line endings. This repo is developed and CI-tested on Windows too;
+# without this, a Windows checkout could commit CRLF into .go files and break
+# gofmt/build on other platforms.
+* text=auto eol=lf
+
+*.go   text eol=lf
+*.mod  text eol=lf
+*.sum  text eol=lf
+*.yaml text eol=lf
+*.yml  text eol=lf
+*.md   text eol=lf
