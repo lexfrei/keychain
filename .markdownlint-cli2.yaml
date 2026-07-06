@@ -1,0 +1,15 @@
+# One line per paragraph is the house style — the renderer wraps to viewer
+# width — so line-length (MD013) is off by design. Go code is tab-indented, so
+# MD010 skips fenced code blocks but still catches stray tabs in prose.
+# Everything else stays on.
+config:
+  default: true
+  MD013: false
+  MD010:
+    code_blocks: false
+
+globs:
+  - "**/*.md"
+
+ignores:
+  - "**/node_modules/**"
