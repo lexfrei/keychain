@@ -27,6 +27,10 @@ The contract every backend upholds:
 - Empty `service` or empty `account` is `ErrInvalidKey`. Empty `secret` is allowed and is distinct from absent (`Get` returns an empty, non-nil slice).
 - A separate process reads what another wrote, with no prompt (the headless-daemon guarantee, exercised cross-process).
 
+## Linting is a ratchet
+
+Never disable a linter or loosen a rule to make code pass — fix the code instead. The config only tightens over time; a stricter threshold or a newly enabled linter is always welcome, a relaxation needs a written, rule-specific justification in the PR that does it. Inline suppressions are a last resort and must be specific and explained (`//nolint:thelinter // why`, which `nolintlint` already enforces); prefer removing the need for the suppression over adding one. "The linter is annoying" is not a reason — the linter is the floor, and we raise it.
+
 ## No-slop comments
 
 Comments follow noslopgrenade.com: a comment earns its place by explaining the non-obvious WHY — a platform quirk, a memory rule, a protocol invariant — never by restating the code. Human-length, no throat-clearing, no scaffolding heavier than the content. Same bar for godoc and test names.
