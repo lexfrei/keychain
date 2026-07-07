@@ -151,7 +151,15 @@ jobs:
       # (native Security.framework and the security-CLI opt-in), the 16 KB
       # payload, the cross-process read, and the cross-identity CLI read.
       - name: Integration tests
-        run: go test -tags keychain_integration ./...
+        run: go test -tags keychain_integration -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
+        with:
+          files: ./coverage.out
+          flags: integration-macos
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
       # Re-run under the reference counter to prove no CoreFoundation ref leaks.
       - name: CoreFoundation leak check
@@ -175,7 +183,15 @@ jobs:
       # 2560-byte blobs; unique throwaway service names avoid clobbering.
       - name: Integration tests
         shell: bash
-        run: go test -tags keychain_integration ./...
+        run: go test -tags keychain_integration -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
+        with:
+          files: ./coverage.out
+          flags: integration-windows
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   integration-linux:
     name: Integration (Linux)
@@ -205,8 +221,16 @@ jobs:
           dbus-run-session -- bash -c '
             rm -rf "$HOME/.local/share/keyrings"
             echo -n "keychain-ci" | gnome-keyring-daemon --unlock --components=secrets
-            go test -tags keychain_integration ./...
+            go test -tags keychain_integration -coverprofile=coverage.out -covermode=atomic -coverpkg=./... ./...
           '
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7
+        with:
+          files: ./coverage.out
+          flags: integration-linux
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   vulncheck:
     name: Vulnerabilities
