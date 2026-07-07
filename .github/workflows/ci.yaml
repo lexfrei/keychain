@@ -108,7 +108,10 @@ jobs:
           go-version: '1.26.4'
           cache: true
 
+      # bash on every runner (Git Bash on Windows) so the coverage flags parse
+      # identically; PowerShell splits -coverprofile=coverage.out at the dot.
       - name: Test
+        shell: bash
         run: go test ${{ matrix.race }} -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage
