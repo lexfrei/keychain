@@ -156,3 +156,23 @@ jobs:
       # Re-run under the reference counter to prove no CoreFoundation ref leaks.
       - name: CoreFoundation leak check
         run: go test -tags 'keychain_integration keychain_cfdebug' ./...
+
+  integration-windows:
+    name: Integration (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+
+      # Credential Manager is per-user and needs no setup on the runner. The
+      # contract's 16 KB payload exercises the chunk container across several
+      # 2560-byte blobs; unique throwaway service names avoid clobbering.
+      - name: Integration tests
+        shell: bash
+        run: go test -tags keychain_integration ./...
