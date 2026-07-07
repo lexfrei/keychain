@@ -195,13 +195,15 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gnome-keyring dbus-x11
 
-      # dbus-run-session gives a hermetic session bus (no X11); piping an empty
-      # password to gnome-keyring-daemon --unlock creates and unlocks a fresh
-      # login keyring, which becomes the default collection — so CreateItem and
-      # Delete complete without a prompt.
+      # dbus-run-session gives a hermetic session bus (no X11). With no keyring
+      # files present, piping a non-empty password to `gnome-keyring-daemon
+      # --unlock` creates the login keyring, unlocks it, and aliases it as the
+      # default collection — the state the backend needs. An empty password does
+      # not set up the default alias, so the value is non-empty on purpose.
       - name: Integration tests
         run: |
           dbus-run-session -- bash -c '
-            echo -n "" | gnome-keyring-daemon --unlock --components=secrets
+            rm -rf "$HOME/.local/share/keyrings"
+            echo -n "keychain-ci" | gnome-keyring-daemon --unlock --components=secrets
             go test -tags keychain_integration ./...
           '

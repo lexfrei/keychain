@@ -215,6 +215,9 @@ func (s *session) open(ctx context.Context) error {
 		return fmt.Errorf("read default collection: %w", err)
 	}
 
+	// No default collection alias — the store has never been set up with one.
+	// The backend needs an existing collection to hold items; a headless
+	// deployment must provision the default collection out of band.
 	if collectionPath == nullPath {
 		return errSecretServiceUnavailable
 	}
