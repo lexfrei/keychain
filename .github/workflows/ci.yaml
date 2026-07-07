@@ -258,6 +258,29 @@ jobs:
               go test -tags keychain_integration ./...
             '
 
+  integration-openbsd:
+    name: Integration (OpenBSD)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      # Same runtime check on OpenBSD: its godbus syscalls differ from FreeBSD's,
+      # so this exercises them against gnome-keyring. pkg_add is non-interactive.
+      - name: Integration tests in an OpenBSD VM
+        uses: vmactions/openbsd-vm@18edb32f4e48dae5865d7b8b3a9587bc01218a20 # v1.4.4
+        with:
+          usesh: true
+          prepare: |
+            pkg_add -I go gnome-keyring dbus
+          run: |
+            export GOTOOLCHAIN=auto
+            dbus-run-session -- sh -c '
+              rm -rf "$HOME/.local/share/keyrings"
+              printf "keychain-ci" | gnome-keyring-daemon --unlock --components=secrets
+              go test -tags keychain_integration ./...
+            '
+
   vulncheck:
     name: Vulnerabilities
     runs-on: ubuntu-latest
