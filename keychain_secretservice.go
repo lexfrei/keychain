@@ -208,20 +208,51 @@ func (s *session) open(ctx context.Context) error {
 		return fmt.Errorf("open session: %w", err)
 	}
 
-	var collectionPath dbus.ObjectPath
-
-	err = s.service.CallWithContext(ctx, ifaceService+".ReadAlias", 0, "default").Store(&collectionPath)
+	collectionPath, err := s.resolveCollection(ctx)
 	if err != nil {
-		return fmt.Errorf("read default collection: %w", err)
-	}
-
-	if collectionPath == nullPath {
-		return errSecretServiceUnavailable
+		return err
 	}
 
 	s.collection = s.conn.Object(ssName, collectionPath)
 
 	return s.unlock(ctx, collectionPath)
+}
+
+// resolveCollection returns the default collection's path, creating it (aliased
+// "default") when the store has none. A fresh keyring or a headless session
+// often has no default alias yet, and the store cannot be used without a
+// collection to hold items.
+func (s *session) resolveCollection(ctx context.Context) (dbus.ObjectPath, error) {
+	var path dbus.ObjectPath
+
+	err := s.service.CallWithContext(ctx, ifaceService+".ReadAlias", 0, "default").Store(&path)
+	if err != nil {
+		return nullPath, fmt.Errorf("read default collection: %w", err)
+	}
+
+	if path != nullPath {
+		return path, nil
+	}
+
+	properties := map[string]dbus.Variant{
+		ifaceCollection + ".Label": dbus.MakeVariant("default"),
+	}
+
+	var prompt dbus.ObjectPath
+
+	err = s.service.CallWithContext(ctx, ifaceService+".CreateCollection", 0, properties, "default").
+		Store(&path, &prompt)
+	if err != nil {
+		return nullPath, fmt.Errorf("create default collection: %w", err)
+	}
+
+	// A non-"/" prompt or an empty path means the store wanted interaction to
+	// finish creating the collection, which a headless caller cannot give.
+	if prompt != nullPath || path == nullPath {
+		return nullPath, errSecretServiceUnavailable
+	}
+
+	return path, nil
 }
 
 func (s *session) close() {
