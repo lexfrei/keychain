@@ -14,8 +14,12 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint
+    name: Lint (${{ matrix.goos }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -26,13 +30,19 @@ jobs:
           go-version: '1.26.4'
           cache: true
 
+      # golangci-lint only analyses the files built for the active GOOS, so lint
+      # every target: otherwise the whole darwin backend (every file is
+      # //go:build darwin) would never be checked on the ubuntu runner.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.12.2
           args: --timeout=5m
+        env:
+          GOOS: ${{ matrix.goos }}
 
       - name: markdownlint
+        if: matrix.goos == 'linux'
         uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23
         with:
           globs: '**/*.md'
