@@ -9,7 +9,7 @@ It is a `zalando/go-keyring` successor. On macOS it calls the Security.framework
 
 ## Status
 
-Under construction. The macOS backend has landed (native Security.framework, with an optional `/usr/bin/security` delegation — see [macOS access](#macos-rebuild-stability-and-code-signing)). Windows and Linux/\*BSD are next and currently report `ErrUnsupported`. The public API is stable.
+All three backends have shipped: macOS (native Security.framework, with an optional `/usr/bin/security` delegation — see [macOS access](#macos-rebuild-stability-and-code-signing)), Windows (Credential Manager via inline advapi32, with transparent chunking past the 2560-byte blob cap), and Linux/\*BSD (freedesktop Secret Service over D-Bus). Every backend is exercised by a gated integration job on its own OS runner. The public API is stable.
 
 ## Install
 
@@ -84,6 +84,10 @@ kc := keychain.New(keychain.WithSecurityCLI())
 ```
 
 Items written this way live in the stable `apple-tool` partition and stay readable across rebuilds and apps. The trade: the secret is passed as a command-line argument, so it is briefly visible to the same user in `ps` and is bounded by the OS argument-length limit (`ARG_MAX`, ~1 MB — ample for typical secrets, but not uncapped like the native path). That is acceptable only because such an item is already readable by any process of the user. Use it consistently — an item written with it must also be read with it; mixing the two paths on one item returns a garbled or missing value, not an error. It is a no-op on Linux and Windows.
+
+### Linux/\*BSD: Secret Service availability
+
+The backend talks to the freedesktop Secret Service (gnome-keyring / KWallet) over the session D-Bus, so it needs a session bus and an unlocked default collection. On a bare server or container with no secret-service provider — or a locked collection that would need an interactive unlock — every operation returns a clear error rather than hanging, and no prompt is ever shown. A daemon that must run in such an environment should detect the error and fall back to another store (for example a plaintext file behind an explicit opt-in). DragonFly BSD is not covered — its D-Bus library does not build there — and reports `ErrUnsupported`.
 
 ## Security
 
