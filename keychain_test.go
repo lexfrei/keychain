@@ -16,7 +16,7 @@ import (
 // integration tests run the same runContract against each real OS store.
 func TestContractAgainstFake(t *testing.T) {
 	useBackend(t, newFakeBackend())
-	runContract(t, "keychain-unit-contract")
+	runContract(t, New(), "keychain-unit-contract")
 }
 
 func TestOptionsApply(t *testing.T) {
@@ -36,6 +36,14 @@ func TestOptionsApply(t *testing.T) {
 
 	if cfg.label != "my label" {
 		t.Errorf("label = %q, want %q", cfg.label, "my label")
+	}
+
+	if def.securityCLI {
+		t.Error("default securityCLI = true, want false")
+	}
+
+	if !newConfig(WithSecurityCLI()).securityCLI {
+		t.Error("WithSecurityCLI did not set securityCLI")
 	}
 }
 

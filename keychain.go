@@ -31,12 +31,21 @@
 //
 // # Security
 //
-// Every backend protects data-at-rest and is readable, without a prompt, by any
-// process of the same user. That is the deliberate trade for a headless daemon;
-// none of the backends defends against code already executing as that user. The
-// only mechanism that would — the macOS TrustCurrentApp per-binary ACL — breaks
-// on rebuild and is offered strictly as opt-in. The library never writes a
-// plaintext file itself.
+// Every backend protects data-at-rest and never writes a plaintext file itself.
+// On Linux and Windows an item is readable, without a prompt, by any process of
+// the same user — the deliberate trade for a headless daemon. None of the
+// backends defends against code already executing as that user.
+//
+// # macOS access
+//
+// macOS additionally gates each keychain item by an access partition keyed to
+// the creating binary's code identity. A process of the same identity reads
+// without a prompt across restarts and rebuilds: this holds for the same binary
+// and for any binary code-signed with the same stable Apple Team ID. An unsigned
+// or ad-hoc-signed binary — the default go build output — is bound to its cdhash,
+// which changes on every rebuild, so a rebuilt copy can no longer read what it
+// stored. [WithSecurityCLI] is the opt-in escape hatch for that case; a stable
+// Team ID signature needs nothing extra.
 package keychain
 
 import (
@@ -76,11 +85,12 @@ const (
 type Option func(*config)
 
 // config is the resolved set of options. Its zero value is the default:
-// TrustAll, no label, and a silent logger.
+// TrustAll, no label, a silent logger, and the native API backend.
 type config struct {
-	accessMode AccessMode
-	label      string
-	logger     *slog.Logger
+	accessMode  AccessMode
+	label       string
+	logger      *slog.Logger
+	securityCLI bool
 }
 
 // WithAccessMode selects the macOS read-access ACL. It defaults to TrustAll and
@@ -99,6 +109,31 @@ func WithLabel(label string) Option {
 // silent. The secret value is never logged, only its length and the lookup key.
 func WithLogger(logger *slog.Logger) Option {
 	return func(cfg *config) { cfg.logger = logger }
+}
+
+// WithSecurityCLI routes macOS operations through the /usr/bin/security tool
+// instead of the native Security.framework API. It exists for one case: an
+// unsigned or ad-hoc-signed binary that must read its own secret again after a
+// rebuild, or share it with another application of the same user.
+//
+// The native default binds an item to its creator's code identity (its cdhash),
+// which changes on every rebuild, so a rebuilt unsigned binary can no longer
+// read what it stored. Items written through /usr/bin/security instead live in
+// the stable "apple-tool" access partition and stay readable across rebuilds and
+// across apps. The trade is that the secret is passed as a command-line argument
+// (briefly visible to the same user in the process list) — acceptable only
+// because such an item is already readable by any process of the user.
+//
+// It is a no-op on Linux and Windows, whose stores are user-scoped with no such
+// partitioning. A binary code-signed with a stable Apple Team ID does not need
+// it: the native default is already rebuild-stable for same-team readers.
+//
+// Use it consistently: an item written with it must also be read with it. The
+// two paths store the value differently, so mixing them on one item does not
+// error — the value comes back garbled or missing. WithLabel and WithAccessMode
+// have no effect in this mode.
+func WithSecurityCLI() Option {
+	return func(cfg *config) { cfg.securityCLI = true }
 }
 
 func newConfig(opts ...Option) config {
