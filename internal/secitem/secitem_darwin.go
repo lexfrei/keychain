@@ -20,6 +20,10 @@ const (
 	ItemNotFound          OSStatus = -25300
 	DuplicateItem         OSStatus = -25299
 	InteractionNotAllowed OSStatus = -25308
+	// AuthFailed is errSecAuthFailed: a headless read denied by the item's access
+	// partition or ACL (e.g. an unsigned binary reading its own item after a
+	// rebuild changed its cdhash), as opposed to a lock that a prompt could clear.
+	AuthFailed OSStatus = -25293
 )
 
 // Attrs holds the resolved kSec* constants used to build query and attribute

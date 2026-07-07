@@ -50,6 +50,19 @@ func main() {
 }
 ```
 
+## Errors
+
+`Get` and `Delete` distinguish the cases a caller needs to branch on, all testable with `errors.Is`:
+
+- `keychain.ErrNotFound` — no such item (`Get` only; `Delete` of an absent item is a nil no-op).
+- `keychain.ErrInvalidKey` — an empty service or account.
+- `keychain.ErrLocked` — the store is locked and would need an interactive unlock (a locked Linux collection; a macOS read that would prompt).
+- `keychain.ErrUnavailable` — no reachable store (no Linux session bus or default collection; the macOS Security framework failed to load) — a signal to fall back rather than retry.
+- `keychain.ErrAccessDenied` — macOS only: the item exists but this process's code identity is denied by the access partition (typically an unsigned binary reading its own item after a rebuild) — fall back to `WithSecurityCLI` or another store.
+- `keychain.ErrUnsupported` — a platform with no backend.
+
+Every other error carries the platform detail in its message.
+
 ## Configuration and logging
 
 The package-level functions use a silent default. For a logger or a non-default access mode, build a `Keychain` with `New` and call its methods:
@@ -92,6 +105,14 @@ The backend talks to the freedesktop Secret Service (gnome-keyring / KWallet) ov
 ## Security
 
 Every backend protects data-at-rest and never writes a plaintext file itself. On Linux and Windows an item is readable, without a prompt, by any process of the same user — the deliberate trade for a headless daemon. On macOS the reader must additionally match the item's access partition (see [macOS access](#macos-rebuild-stability-and-code-signing)). None of the backends defends against code already running as that user. See the package documentation for the full threat model.
+
+## Known limitations
+
+- **macOS, unsigned binaries.** The native backend is rebuild-stable only for the same binary or a stable Apple Team ID. An unsigned or ad-hoc-signed binary — the default `go build` output — loses access to its own items after a rebuild. `WithSecurityCLI` works around it but passes the secret on a command line, briefly visible to the same user in `ps`. There is no cgo-free way to make a native item readable by an arbitrary process; the OS partition mechanism prevents that by design.
+- **Linux/\*BSD is best-effort beyond gnome-keyring.** Only Linux with gnome-keyring is exercised in CI. FreeBSD, OpenBSD, NetBSD, and KWallet compile and use the identical D-Bus path but are not integration-tested; treat them as best-effort. DragonFly is unsupported. The backend also needs a session bus and an existing default collection — a fresh headless keyring must be provisioned out of band.
+- **macOS relies on deprecated ACL APIs.** The trust-all ACL uses `SecAccess`/`SecACL` calls Apple deprecated (but has not removed) for the legacy keychain. If a future macOS drops them, `Set` falls back to a per-app ACL.
+- **Operations are serialized.** A process-wide mutex serializes every store call, which keeps the read-modify-write paths simple and is ample for a daemon, but is not built for high-throughput concurrent access.
+- **Not yet battle-tested.** v1.x is API-stable and passes the full behavioural contract against each real store in CI, but it has no production mileage yet; validate it against your own store before relying on it.
 
 ## License
 

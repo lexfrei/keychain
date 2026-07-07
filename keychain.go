@@ -64,6 +64,27 @@ var ErrInvalidKey = errors.New("keychain: service and account must both be non-e
 // ErrUnsupported is returned on a platform whose backend is not implemented.
 var ErrUnsupported = errors.New("keychain: platform not supported")
 
+// ErrLocked wraps an error from a store that is locked and would need an
+// interactive unlock to proceed — a headless caller cannot answer the prompt.
+// It occurs on the Linux Secret Service when the collection is locked, and on
+// macOS when a read would need a keychain prompt (errSecInteractionNotAllowed).
+// Test for it with errors.Is; the wrapped error carries the platform detail.
+var ErrLocked = errors.New("keychain: store is locked and needs an interactive unlock")
+
+// ErrUnavailable wraps an error from a store that is not reachable at all: on
+// Linux, no session bus or no default collection; on macOS, the Security
+// framework failed to load. It signals the caller to fall back to another store
+// rather than retry. Test for it with errors.Is.
+var ErrUnavailable = errors.New("keychain: secret store is unavailable")
+
+// ErrAccessDenied wraps a macOS denial where the item exists but this process is
+// not permitted to read it — the access partition or ACL rejected it, which an
+// unlock cannot fix. The common cause is an unsigned or ad-hoc-signed binary
+// reading its own item after a rebuild changed its code identity; such a caller
+// should fall back to [WithSecurityCLI] or another store. It does not occur on
+// Linux or Windows. Test for it with errors.Is.
+var ErrAccessDenied = errors.New("keychain: access denied by the store's ACL or partition")
+
 // AccessMode controls read access. It is only meaningful on macOS; on Linux and
 // Windows secrets are user-scoped and every mode behaves like TrustAll.
 type AccessMode int
