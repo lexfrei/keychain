@@ -1,4 +1,4 @@
-//go:build !darwin && !windows && !linux && !freebsd && !openbsd && !netbsd && !dragonfly
+//go:build !darwin && !windows && !linux && !freebsd && !openbsd && !netbsd
 
 package keychain
 
