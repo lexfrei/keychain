@@ -207,3 +207,39 @@ jobs:
             echo -n "keychain-ci" | gnome-keyring-daemon --unlock --components=secrets
             go test -tags keychain_integration ./...
           '
+
+  vulncheck:
+    name: Vulnerabilities
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+
+      # A secret store should not ship on a dependency with a known vulnerability.
+      # govulncheck reports only vulns actually reachable from this module's code.
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  fuzz:
+    name: Fuzz (chunk)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+
+      # The chunk container is the format-parsing core; fuzz it briefly on every
+      # run so a boundary or offset regression surfaces as a saved crasher.
+      - name: Fuzz the chunk round trip
+        run: go test -run '^$' -fuzz FuzzRoundTrip -fuzztime 40s ./internal/chunk/
