@@ -281,6 +281,34 @@ jobs:
               go test -tags keychain_integration ./...
             '
 
+  integration-netbsd:
+    name: Integration (NetBSD)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      # The third BSD syscall variant. pkgsrc ships Go under a version-suffixed
+      # name that needs the pkg_alternatives symlink, so install the official
+      # NetBSD build of the exact version instead; gnome-keyring and dbus still
+      # come from pkgsrc.
+      - name: Integration tests in a NetBSD VM
+        uses: vmactions/netbsd-vm@1d9767765fd3f986e6de3aff4b1148f0c3a45f01 # v1.4.1
+        with:
+          usesh: true
+          prepare: |
+            /usr/sbin/pkg_add gnome-keyring dbus curl
+          run: |
+            curl -L -o /tmp/go.tgz https://dl.google.com/go/go1.26.4.netbsd-amd64.tar.gz
+            mkdir -p /usr/local
+            tar -C /usr/local -xzf /tmp/go.tgz
+            export PATH="/usr/local/go/bin:/usr/pkg/bin:$PATH"
+            dbus-run-session -- sh -c '
+              rm -rf "$HOME/.local/share/keyrings"
+              printf "keychain-ci" | gnome-keyring-daemon --unlock --components=secrets
+              go test -tags keychain_integration ./...
+            '
+
   vulncheck:
     name: Vulnerabilities
     runs-on: ubuntu-latest
