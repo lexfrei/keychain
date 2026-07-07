@@ -176,3 +176,32 @@ jobs:
       - name: Integration tests
         shell: bash
         run: go test -tags keychain_integration ./...
+
+  integration-linux:
+    name: Integration (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+
+      - name: Install gnome-keyring and dbus
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gnome-keyring dbus-x11
+
+      # dbus-run-session gives a hermetic session bus (no X11); piping an empty
+      # password to gnome-keyring-daemon --unlock creates and unlocks a fresh
+      # login keyring, which becomes the default collection — so CreateItem and
+      # Delete complete without a prompt.
+      - name: Integration tests
+        run: |
+          dbus-run-session -- bash -c '
+            echo -n "" | gnome-keyring-daemon --unlock --components=secrets
+            go test -tags keychain_integration ./...
+          '

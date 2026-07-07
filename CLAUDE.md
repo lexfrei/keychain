@@ -9,8 +9,9 @@ Always act correctly, completely, and without cutting corners ("правильн
 ## Hard invariant: maximally pure Go
 
 - No cgo, ever, on any platform. `CGO_ENABLED=0` is the permanent build mode; `import "C"` is forbidden. CI cross-compiles every GOOS with cgo disabled to enforce this.
-- Dependency ceiling is two, both pure Go and each imported only under its own GOOS build tag: `github.com/ebitengine/purego` (darwin) and `github.com/godbus/dbus/v5` (linux/\*bsd). macOS, Windows, and all core/chunk logic are standard-library only — Windows Credential Manager is reached through inlined `syscall.NewLazyDLL("advapi32.dll")` calls, not `x/sys`, not a third-party wrapper.
-- Adding a third dependency requires a written justification in the PR that opens it. purego is unavoidable (the only pure-Go way to call Security.framework); godbus is kept rather than hand-rolling the D-Bus wire protocol. Everything else we inline.
+- Two direct dependencies, both pure Go and each imported only under its own GOOS build tag: `github.com/ebitengine/purego` (darwin) and `github.com/godbus/dbus/v5` (linux/\*bsd). macOS, Windows, and all core/chunk logic are standard-library only — Windows Credential Manager is reached through inlined `syscall.NewLazyDLL("advapi32.dll")` calls, not `x/sys`, not a third-party wrapper. We never import `golang.org/x/sys` directly.
+- `golang.org/x/sys` appears once as an **indirect** dependency, pulled in by godbus v5.2+. It is pure Go and stays cgo-free. It is accepted rather than avoided: the older godbus releases that omit it fail to compile on FreeBSD and DragonFly, and dropping BSD support to shed a benign pure-Go transitive is the worse trade. `go.mod` therefore lists exactly two `require` blocks — the two direct deps, plus x/sys marked `// indirect`.
+- Adding a new **direct** dependency requires a written justification in the PR that opens it. purego is unavoidable (the only pure-Go way to call Security.framework); godbus is kept rather than hand-rolling the D-Bus wire protocol. Everything else we inline.
 
 ## TDD and tests as contract
 
