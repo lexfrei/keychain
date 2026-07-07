@@ -232,6 +232,32 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
 
+  integration-freebsd:
+    name: Integration (FreeBSD)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      # A real FreeBSD VM (QEMU) proves the godbus + Secret Service path runs at
+      # runtime on a BSD, not merely that it cross-compiles. The gnome-keyring and
+      # dbus setup mirrors the Linux job; printf keeps the password newline-free in
+      # the VM's POSIX sh. The FreeBSD go package may lag, so GOTOOLCHAIN fetches
+      # the version go.mod pins.
+      - name: Integration tests in a FreeBSD VM
+        uses: vmactions/freebsd-vm@5a72679103d223925653750faa878a143340fbd0 # v1.5.0
+        with:
+          usesh: true
+          prepare: |
+            pkg install -y go gnome-keyring dbus
+          run: |
+            export GOTOOLCHAIN=auto
+            dbus-run-session -- sh -c '
+              rm -rf "$HOME/.local/share/keyrings"
+              printf "keychain-ci" | gnome-keyring-daemon --unlock --components=secrets
+              go test -tags keychain_integration ./...
+            '
+
   vulncheck:
     name: Vulnerabilities
     runs-on: ubuntu-latest
