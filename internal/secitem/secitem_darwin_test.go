@@ -43,3 +43,14 @@ func TestErrorMessageWithoutMessage(t *testing.T) {
 		t.Errorf("Error() = %q, want it to contain the status", got)
 	}
 }
+
+// TestErrorWithMessage pins the other Error branch: when the framework message is
+// present it is included alongside the status.
+func TestErrorWithMessage(t *testing.T) {
+	err := &Error{Status: ItemNotFound, Message: "the specified item could not be found"}
+
+	got := err.Error()
+	if !strings.Contains(got, "-25300") || !strings.Contains(got, "could not be found") {
+		t.Errorf("Error() = %q, want both the status and the message", got)
+	}
+}
