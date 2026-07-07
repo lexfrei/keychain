@@ -69,3 +69,34 @@ func FuzzRoundTrip(f *testing.F) {
 		}
 	})
 }
+
+// FuzzGetCorrupt puts arbitrary bytes at the header and first-chunk targets and
+// calls Get. A secret store must never panic on a tampered or truncated blob: it
+// must return the value or ErrNotFound (corrupt reads as absent), and a nil error
+// must come with a non-nil slice. The fuzzer flags any panic automatically.
+func FuzzGetCorrupt(f *testing.F) {
+	f.Add([]byte("KCC1"), []byte("payload"), uint8(4))
+	f.Add([]byte{}, []byte{}, uint8(1))
+	f.Add([]byte("KCC1\x01\x00\x00\x00\x01\x00\x00\x00\x00\x00\x00\x00\x07"), []byte("payload"), uint8(8))
+
+	f.Fuzz(func(t *testing.T, header, chunk0 []byte, blob uint8) {
+		if len(header) > 4*1024 || len(chunk0) > 4*1024 {
+			return
+		}
+
+		store := newFakeStore()
+		store.items[headerTarget("svc", "acct")] = header
+		store.items[chunkTarget("svc", "acct", 0)] = chunk0
+
+		maxBlob := int(blob)
+		if maxBlob == 0 {
+			maxBlob = 1
+		}
+
+		got, err := Chunker{Store: store, MaxBlob: maxBlob}.Get("svc", "acct")
+
+		if err == nil && got == nil {
+			t.Fatal("Get returned a nil error with a nil slice")
+		}
+	})
+}
