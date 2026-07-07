@@ -10,7 +10,6 @@ package keychain
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -41,12 +40,13 @@ const (
 	ssTimeout = 10 * time.Second
 )
 
-// Clear, never-hang errors for the two headless dead-ends: no reachable service
-// (no session bus, or no default collection) and a collection that would need an
-// interactive unlock. Both are wrapped by failSecretService before surfacing.
+// Clear, never-hang errors for the two headless dead-ends, each wrapping the
+// exported sentinel so a caller can errors.Is them: no reachable service (no
+// session bus, or no default collection) and a collection that would need an
+// interactive unlock.
 var (
-	errSecretServiceUnavailable = errors.New("secret service unavailable (no session bus or no default collection)")
-	errSecretServiceLocked      = errors.New("collection is locked and needs an interactive unlock")
+	errSecretServiceUnavailable = fmt.Errorf("no session bus or default collection: %w", ErrUnavailable)
+	errSecretServiceLocked      = fmt.Errorf("collection is locked: %w", ErrLocked)
 )
 
 // dbusSecret mirrors the org.freedesktop.Secret Secret struct, D-Bus signature

@@ -3,6 +3,7 @@
 package keychain
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 
@@ -35,9 +36,9 @@ func (b darwinBackend) set(service, account string, secret []byte, cfg config) e
 }
 
 func (darwinBackend) apiSet(service, account string, secret []byte, cfg config) error {
-	err := secitem.Load()
+	err := loadSecitem()
 	if err != nil {
-		return failDarwin(err)
+		return err
 	}
 
 	arena := &cfArena{}
@@ -47,7 +48,7 @@ func (darwinBackend) apiSet(service, account string, secret []byte, cfg config) 
 	// already exists; upsert then falls through to an update of the value only.
 	status := secitem.ItemAdd(arena.addAttributes(service, account, secret, cfg))
 	if status == secitem.DuplicateItem {
-		return updateItem(arena, service, account, secret)
+		return updateItem(arena, service, account, secret, cfg)
 	}
 
 	return failDarwin(secitem.StatusError(status))
@@ -62,9 +63,9 @@ func (b darwinBackend) get(service, account string, cfg config) ([]byte, error) 
 }
 
 func (darwinBackend) apiGet(service, account string) ([]byte, error) {
-	err := secitem.Load()
+	err := loadSecitem()
 	if err != nil {
-		return nil, failDarwin(err)
+		return nil, err
 	}
 
 	arena := &cfArena{}
@@ -106,9 +107,9 @@ func (b darwinBackend) del(service, account string, cfg config) error {
 }
 
 func (darwinBackend) apiDel(service, account string) error {
-	err := secitem.Load()
+	err := loadSecitem()
 	if err != nil {
-		return failDarwin(err)
+		return err
 	}
 
 	arena := &cfArena{}
@@ -128,22 +129,26 @@ func (darwinBackend) apiDel(service, account string) error {
 	return failDarwin(secitem.StatusError(status))
 }
 
-// updateItem replaces an existing item's value. It deliberately omits
-// kSecAttrAccess: rewriting the ACL of a stored item triggers a user prompt, and
-// upsert only needs to replace the value — the trust-all ACL set when the item
-// was first created is preserved.
-func updateItem(arena *cfArena, service, account string, secret []byte) error {
+// updateItem replaces an existing item's value (and label, if one was given). It
+// deliberately omits kSecAttrAccess: rewriting the ACL of a stored item triggers
+// a user prompt, whereas value and label do not — so the trust-all ACL set when
+// the item was first created is preserved.
+func updateItem(arena *cfArena, service, account string, secret []byte, cfg config) error {
 	attrs := secitem.Constants()
 	query := arena.dict(
 		[]cf.Ref{attrs.Class, attrs.Service, attrs.Account},
 		[]cf.Ref{attrs.GenericPassword, arena.str(service), arena.str(account)},
 	)
-	update := arena.dict(
-		[]cf.Ref{attrs.ValueData},
-		[]cf.Ref{arena.data(secret)},
-	)
 
-	return failDarwin(secitem.StatusError(secitem.ItemUpdate(query, update)))
+	keys := []cf.Ref{attrs.ValueData}
+	values := []cf.Ref{arena.data(secret)}
+
+	if cfg.label != "" {
+		keys = append(keys, attrs.Label)
+		values = append(values, arena.str(cfg.label))
+	}
+
+	return failDarwin(secitem.StatusError(secitem.ItemUpdate(query, arena.dict(keys, values))))
 }
 
 // failDarwin tags a backend error with the darwin path so a caller can see which
@@ -154,7 +159,33 @@ func failDarwin(err error) error {
 		return nil
 	}
 
+	// Classify the two conditions a caller needs to branch on: a headless prompt
+	// (errSecInteractionNotAllowed) as ErrLocked, and a partition/ACL denial
+	// (errSecAuthFailed, e.g. a rebuilt unsigned binary) as ErrAccessDenied.
+	var secErr *secitem.Error
+	if errors.As(err, &secErr) {
+		if secErr.Status == secitem.InteractionNotAllowed {
+			return fmt.Errorf("keychain: darwin: %w: %w", ErrLocked, err)
+		}
+
+		if secErr.Status == secitem.AuthFailed {
+			return fmt.Errorf("keychain: darwin: %w: %w", ErrAccessDenied, err)
+		}
+	}
+
 	return fmt.Errorf("keychain: darwin: %w", err)
+}
+
+// loadSecitem loads the Security binding, tagging a failure as ErrUnavailable:
+// if the framework will not load, the store cannot come up and the caller should
+// fall back rather than retry.
+func loadSecitem() error {
+	err := secitem.Load()
+	if err != nil {
+		return fmt.Errorf("keychain: darwin: %w: %w", ErrUnavailable, err)
+	}
+
+	return nil
 }
 
 // cfArena collects CF release functions so a builder can create several
