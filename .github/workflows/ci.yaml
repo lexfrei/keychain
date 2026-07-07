@@ -300,6 +300,7 @@ jobs:
             /usr/sbin/pkg_add gnome-keyring dbus curl
           run: |
             curl -L -o /tmp/go.tgz https://dl.google.com/go/go1.26.4.netbsd-amd64.tar.gz
+            mkdir -p /usr/local
             tar -C /usr/local -xzf /tmp/go.tgz
             export PATH="/usr/local/go/bin:/usr/pkg/bin:$PATH"
             dbus-run-session -- sh -c '
