@@ -2,8 +2,11 @@ package keychain
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -13,7 +16,7 @@ import (
 // integration tests run the same runContract against each real OS store.
 func TestContractAgainstFake(t *testing.T) {
 	useBackend(t, newFakeBackend())
-	runContract(t, "keychain-unit-contract")
+	runContract(t, New(), "keychain-unit-contract")
 }
 
 func TestOptionsApply(t *testing.T) {
@@ -33,6 +36,78 @@ func TestOptionsApply(t *testing.T) {
 
 	if cfg.label != "my label" {
 		t.Errorf("label = %q, want %q", cfg.label, "my label")
+	}
+
+	if def.securityCLI {
+		t.Error("default securityCLI = true, want false")
+	}
+
+	if !newConfig(WithSecurityCLI()).securityCLI {
+		t.Error("WithSecurityCLI did not set securityCLI")
+	}
+}
+
+// TestNewInstanceRoundTrip exercises the struct API (New + methods), which the
+// package-level functions delegate to.
+func TestNewInstanceRoundTrip(t *testing.T) {
+	useBackend(t, newFakeBackend())
+
+	kc := New()
+
+	err := kc.Set("svc", "acct", []byte("v"))
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	got, err := kc.Get("svc", "acct")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	if string(got) != "v" {
+		t.Fatalf("Get = %q, want v", got)
+	}
+
+	err = kc.Delete("svc", "acct")
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+}
+
+// TestLoggerSilentByDefault pins the library's contract that it emits nothing
+// unless the caller opts in: DiscardHandler reports disabled at every level.
+func TestLoggerSilentByDefault(t *testing.T) {
+	kc := New()
+	if kc.cfg.log().Enabled(context.Background(), slog.LevelError) {
+		t.Error("default Keychain is not silent; a library must emit nothing without WithLogger")
+	}
+}
+
+// TestLoggerInjectedNeverLogsSecret proves two things at once: WithLogger wires
+// debug tracing, and the secret value never reaches the log — only its length
+// and the lookup key.
+func TestLoggerInjectedNeverLogsSecret(t *testing.T) {
+	useBackend(t, newFakeBackend())
+
+	var buf bytes.Buffer
+
+	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	kc := New(WithLogger(logger))
+
+	const secret = "TOP-SECRET-DO-NOT-LOG"
+
+	err := kc.Set("svc", "acct", []byte(secret))
+	if err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+
+	logged := buf.String()
+	if !strings.Contains(logged, "keychain: set") {
+		t.Errorf("debug log is missing the set line; got %q", logged)
+	}
+
+	if strings.Contains(logged, secret) {
+		t.Errorf("secret value leaked into the debug log: %q", logged)
 	}
 }
 

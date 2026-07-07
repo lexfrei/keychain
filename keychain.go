@@ -10,25 +10,47 @@
 // to what it stored — the properties a headless, frequently-rebuilt daemon
 // needs.
 //
+// # Usage
+//
+// The package-level Set, Get, and Delete cover the common case with a silent
+// default configuration. For a logger or a non-default access mode, construct a
+// [Keychain] with [New] and call its methods.
+//
 // # Semantics
 //
 // Set is an upsert. Get returns the exact bytes previously stored, or
-// ErrNotFound. Delete is idempotent — removing an absent item is not an error.
-// Service and account together form the lookup key; neither may be empty. An
-// empty secret is allowed and is distinct from an absent item.
+// [ErrNotFound]. Delete is idempotent — removing an absent item is not an
+// error. Service and account together form the lookup key; neither may be
+// empty. An empty secret is allowed and is distinct from an absent item.
+//
+// # Logging
+//
+// The library is silent by default. Pass [WithLogger] a *slog.Logger to trace,
+// at debug level, which backend ran and how an operation resolved. The secret
+// value is never logged.
 //
 // # Security
 //
-// Every backend protects data-at-rest and is readable, without a prompt, by any
-// process of the same user. That is the deliberate trade for a headless daemon;
-// none of the backends defends against code already executing as that user. The
-// only mechanism that would — the macOS TrustCurrentApp per-binary ACL — breaks
-// on rebuild and is offered strictly as opt-in. The library never writes a
-// plaintext file itself.
+// Every backend protects data-at-rest and never writes a plaintext file itself.
+// On Linux and Windows an item is readable, without a prompt, by any process of
+// the same user — the deliberate trade for a headless daemon. None of the
+// backends defends against code already executing as that user.
+//
+// # macOS access
+//
+// macOS additionally gates each keychain item by an access partition keyed to
+// the creating binary's code identity. A process of the same identity reads
+// without a prompt across restarts and rebuilds: this holds for the same binary
+// and for any binary code-signed with the same stable Apple Team ID. An unsigned
+// or ad-hoc-signed binary — the default go build output — is bound to its cdhash,
+// which changes on every rebuild, so a rebuilt copy can no longer read what it
+// stored. [WithSecurityCLI] is the opt-in escape hatch for that case; a stable
+// Team ID signature needs nothing extra.
 package keychain
 
 import (
 	"errors"
+	"log/slog"
 	"sync"
 )
 
@@ -59,14 +81,16 @@ const (
 	TrustCurrentApp
 )
 
-// Option configures a Set call.
+// Option configures a Keychain (via New) or a single Set call.
 type Option func(*config)
 
-// config is the resolved set of options for one operation. Its zero value is
-// the default: TrustAll and no label.
+// config is the resolved set of options. Its zero value is the default:
+// TrustAll, no label, a silent logger, and the native API backend.
 type config struct {
-	accessMode AccessMode
-	label      string
+	accessMode  AccessMode
+	label       string
+	logger      *slog.Logger
+	securityCLI bool
 }
 
 // WithAccessMode selects the macOS read-access ACL. It defaults to TrustAll and
@@ -81,6 +105,37 @@ func WithLabel(label string) Option {
 	return func(cfg *config) { cfg.label = label }
 }
 
+// WithLogger routes debug-level tracing to logger. Without it the library is
+// silent. The secret value is never logged, only its length and the lookup key.
+func WithLogger(logger *slog.Logger) Option {
+	return func(cfg *config) { cfg.logger = logger }
+}
+
+// WithSecurityCLI routes macOS operations through the /usr/bin/security tool
+// instead of the native Security.framework API. It exists for one case: an
+// unsigned or ad-hoc-signed binary that must read its own secret again after a
+// rebuild, or share it with another application of the same user.
+//
+// The native default binds an item to its creator's code identity (its cdhash),
+// which changes on every rebuild, so a rebuilt unsigned binary can no longer
+// read what it stored. Items written through /usr/bin/security instead live in
+// the stable "apple-tool" access partition and stay readable across rebuilds and
+// across apps. The trade is that the secret is passed as a command-line argument
+// (briefly visible to the same user in the process list) — acceptable only
+// because such an item is already readable by any process of the user.
+//
+// It is a no-op on Linux and Windows, whose stores are user-scoped with no such
+// partitioning. A binary code-signed with a stable Apple Team ID does not need
+// it: the native default is already rebuild-stable for same-team readers.
+//
+// Use it consistently: an item written with it must also be read with it. The
+// two paths store the value differently, so mixing them on one item does not
+// error — the value comes back garbled or missing. WithLabel and WithAccessMode
+// have no effect in this mode.
+func WithSecurityCLI() Option {
+	return func(cfg *config) { cfg.securityCLI = true }
+}
+
 func newConfig(opts ...Option) config {
 	var cfg config
 	for _, opt := range opts {
@@ -90,18 +145,146 @@ func newConfig(opts ...Option) config {
 	return cfg
 }
 
-// mu serializes backend calls and guards the lazy backend handle below. The OS
-// stores are themselves thread-safe; the lock keeps the library's own
-// read-modify-write upsert paths (notably Windows chunking) simple.
-//
-//nolint:gochecknoglobals // one process-wide lock is the whole concurrency model (§14)
-var mu sync.Mutex
+// log returns the configured logger, or a silent one, so a nil logger never
+// panics a backend that traces its work.
+func (c config) log() *slog.Logger {
+	if c.logger != nil {
+		return c.logger
+	}
 
-// activeBackend is the process's lazily-initialised backend, set under mu on
-// first use. Tests swap it to inject a fake.
+	return silentLogger
+}
+
+// silentLogger is the library's quiet default — a library must emit nothing
+// unless the caller opts in with WithLogger.
 //
-//nolint:gochecknoglobals // the single lazily-initialised backend handle (§14)
-var activeBackend backend
+//nolint:gochecknoglobals // immutable shared silent logger
+var silentLogger = slog.New(slog.DiscardHandler)
+
+// Keychain is a handle to the OS secret store with a fixed configuration (a
+// logger and a default access mode). Construct one with New; the package-level
+// Set, Get, and Delete delegate to a default, silent instance.
+type Keychain struct {
+	cfg config
+}
+
+// New returns a Keychain configured by opts. Without WithLogger it is silent.
+func New(opts ...Option) *Keychain {
+	return &Keychain{cfg: newConfig(opts...)}
+}
+
+// Set stores secret under service and account, replacing any existing value.
+// Per-call opts (for example WithLabel) override the Keychain's configuration
+// for this call only.
+func (k *Keychain) Set(service, account string, secret []byte, opts ...Option) error {
+	if service == "" || account == "" {
+		return ErrInvalidKey
+	}
+
+	cfg := k.cfg
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	err := backendLocked().set(service, account, secret, cfg)
+	cfg.log().Debug("keychain: set", "service", service, "account", account, "bytes", len(secret), "err", err)
+
+	return err
+}
+
+// Get returns the secret stored under service and account, or ErrNotFound.
+func (k *Keychain) Get(service, account string) ([]byte, error) {
+	if service == "" || account == "" {
+		return nil, ErrInvalidKey
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	secret, err := backendLocked().get(service, account, k.cfg)
+	if errors.Is(err, errItemNotFound) {
+		k.cfg.log().Debug("keychain: get miss", "service", service, "account", account)
+
+		return nil, ErrNotFound
+	}
+
+	if err != nil {
+		k.cfg.log().Debug("keychain: get error", "service", service, "account", account, "err", err)
+
+		return nil, err
+	}
+
+	k.cfg.log().Debug("keychain: get hit", "service", service, "account", account, "bytes", len(secret))
+
+	return secret, nil
+}
+
+// Delete removes the item under service and account. A missing item is not an
+// error: Delete is idempotent.
+func (k *Keychain) Delete(service, account string) error {
+	if service == "" || account == "" {
+		return ErrInvalidKey
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	err := backendLocked().del(service, account, k.cfg)
+	if errors.Is(err, errItemNotFound) {
+		k.cfg.log().Debug("keychain: delete no-op (absent)", "service", service, "account", account)
+
+		return nil
+	}
+
+	k.cfg.log().Debug("keychain: delete", "service", service, "account", account, "err", err)
+
+	return err
+}
+
+// Set stores secret under service and account using the default configuration.
+func Set(service, account string, secret []byte, opts ...Option) error {
+	return defaultKeychain().Set(service, account, secret, opts...)
+}
+
+// Get returns the secret stored under service and account, or ErrNotFound.
+func Get(service, account string) ([]byte, error) {
+	return defaultKeychain().Get(service, account)
+}
+
+// Delete removes the item under service and account; a missing item is not an
+// error.
+func Delete(service, account string) error {
+	return defaultKeychain().Delete(service, account)
+}
+
+// defaultOnce and defaultInst back the package-level API with one silent
+// Keychain, built lazily.
+//
+//nolint:gochecknoglobals // the process-wide default instance behind the package-level API
+var (
+	defaultOnce sync.Once
+	defaultInst *Keychain
+)
+
+func defaultKeychain() *Keychain {
+	defaultOnce.Do(func() { defaultInst = New() })
+
+	return defaultInst
+}
+
+// mu serializes backend calls and guards the lazy backend handle. The OS stores
+// are thread-safe; the lock keeps the library's own read-modify-write upsert
+// paths (notably Windows chunking) simple, and is shared by every Keychain
+// because they all reach the same process-wide store.
+//
+//nolint:gochecknoglobals // one process-wide lock and one lazy backend handle (§14)
+var (
+	mu            sync.Mutex
+	activeBackend backend
+)
 
 // backendLocked returns the process backend, initialising it on first use. The
 // caller must hold mu.
@@ -111,57 +294,4 @@ func backendLocked() backend {
 	}
 
 	return activeBackend
-}
-
-// Set stores secret under service and account, replacing any existing value.
-func Set(service, account string, secret []byte, opts ...Option) error {
-	if service == "" || account == "" {
-		return ErrInvalidKey
-	}
-
-	cfg := newConfig(opts...)
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	return backendLocked().set(service, account, secret, cfg)
-}
-
-// Get returns the secret stored under service and account, or ErrNotFound.
-func Get(service, account string) ([]byte, error) {
-	if service == "" || account == "" {
-		return nil, ErrInvalidKey
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	secret, err := backendLocked().get(service, account)
-	if errors.Is(err, errItemNotFound) {
-		return nil, ErrNotFound
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return secret, nil
-}
-
-// Delete removes the item under service and account. A missing item is not an
-// error: Delete is idempotent.
-func Delete(service, account string) error {
-	if service == "" || account == "" {
-		return ErrInvalidKey
-	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	err := backendLocked().del(service, account)
-	if errors.Is(err, errItemNotFound) {
-		return nil
-	}
-
-	return err
 }

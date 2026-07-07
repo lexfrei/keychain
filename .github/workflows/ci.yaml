@@ -14,8 +14,12 @@ concurrency:
 
 jobs:
   lint:
-    name: Lint
+    name: Lint (${{ matrix.goos }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goos: [linux, darwin, windows]
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -26,13 +30,19 @@ jobs:
           go-version: '1.26.4'
           cache: true
 
+      # golangci-lint only analyses the files built for the active GOOS, so lint
+      # every target: otherwise the whole darwin backend (every file is
+      # //go:build darwin) would never be checked on the ubuntu runner.
       - name: golangci-lint
         uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9
         with:
           version: v2.12.2
           args: --timeout=5m
+        env:
+          GOOS: ${{ matrix.goos }}
 
       - name: markdownlint
+        if: matrix.goos == 'linux'
         uses: DavidAnson/markdownlint-cli2-action@ded1f9488f68a970bc66ea5619e13e9b52e601cd # v23
         with:
           globs: '**/*.md'
@@ -98,7 +108,10 @@ jobs:
           go-version: '1.26.4'
           cache: true
 
+      # bash on every runner (Git Bash on Windows) so the coverage flags parse
+      # identically; PowerShell splits -coverprofile=coverage.out at the dot.
       - name: Test
+        shell: bash
         run: go test ${{ matrix.race }} -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage
@@ -108,3 +121,38 @@ jobs:
           flags: unittests-${{ matrix.os }}
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: false
+
+  integration-macos:
+    name: Integration (macOS)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Setup Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+
+      # The integration tests mutate a real keychain, so point them at a
+      # throwaway one (empty password, no auto-lock) made the default and the
+      # sole search-list entry — the runner's login keychain is never touched.
+      - name: Create a temporary unlocked keychain
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/keychain-integration.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN"
+          security set-keychain-settings "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          security default-keychain -s "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN"
+
+      # The full behavioural contract on the real store: both macOS backends
+      # (native Security.framework and the security-CLI opt-in), the 16 KB
+      # payload, the cross-process read, and the cross-identity CLI read.
+      - name: Integration tests
+        run: go test -tags keychain_integration ./...
+
+      # Re-run under the reference counter to prove no CoreFoundation ref leaks.
+      - name: CoreFoundation leak check
+        run: go test -tags 'keychain_integration keychain_cfdebug' ./...

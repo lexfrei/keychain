@@ -8,8 +8,8 @@ import "errors"
 // which the public functions translate to ErrNotFound.
 type backend interface {
 	set(service, account string, secret []byte, cfg config) error
-	get(service, account string) ([]byte, error)
-	del(service, account string) error
+	get(service, account string, cfg config) ([]byte, error)
+	del(service, account string, cfg config) error
 }
 
 // errItemNotFound is the internal not-found sentinel every backend returns for
@@ -26,10 +26,10 @@ func (unsupportedBackend) set(_, _ string, _ []byte, _ config) error {
 	return ErrUnsupported
 }
 
-func (unsupportedBackend) get(_, _ string) ([]byte, error) {
+func (unsupportedBackend) get(_, _ string, _ config) ([]byte, error) {
 	return nil, ErrUnsupported
 }
 
-func (unsupportedBackend) del(_, _ string) error {
+func (unsupportedBackend) del(_, _ string, _ config) error {
 	return ErrUnsupported
 }

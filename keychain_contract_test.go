@@ -38,7 +38,7 @@ func (f *fakeBackend) set(service, account string, secret []byte, _ config) erro
 	return nil
 }
 
-func (f *fakeBackend) get(service, account string) ([]byte, error) {
+func (f *fakeBackend) get(service, account string, _ config) ([]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -55,7 +55,7 @@ func (f *fakeBackend) get(service, account string) ([]byte, error) {
 	return out, nil
 }
 
-func (f *fakeBackend) del(service, account string) error {
+func (f *fakeBackend) del(service, account string, _ config) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
@@ -99,26 +99,27 @@ func patternBytes(n int) []byte {
 	return b
 }
 
-// runContract exercises the full behavioural contract through the public API
-// against whichever backend is active. It is called by the fake-backed unit
-// test and by each gated per-OS integration test, so the contract lives in one
-// place. service must be unique to the caller so a real store is not clobbered.
-func runContract(t *testing.T, service string) {
+// runContract exercises the full behavioural contract through the public API of
+// the given Keychain instance. It is called by the fake-backed unit test and by
+// each gated per-OS integration test — including once per macOS backend variant
+// (native API and the security-CLI opt-in) — so the contract lives in one place.
+// service must be unique to the caller so a real store is not clobbered.
+func runContract(t *testing.T, kc *Keychain, service string) {
 	t.Helper()
 
 	t.Run("round trip returns exact bytes", func(t *testing.T) {
 		const account = "round-trip"
 
-		t.Cleanup(func() { _ = Delete(service, account) })
+		t.Cleanup(func() { _ = kc.Delete(service, account) })
 
 		want := []byte("a modest secret value")
 
-		err := Set(service, account, want)
+		err := kc.Set(service, account, want)
 		if err != nil {
 			t.Fatalf("Set: %v", err)
 		}
 
-		got, err := Get(service, account)
+		got, err := kc.Get(service, account)
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
@@ -131,18 +132,18 @@ func runContract(t *testing.T, service string) {
 	t.Run("large payload round trips", func(t *testing.T) {
 		const account = "large-payload"
 
-		t.Cleanup(func() { _ = Delete(service, account) })
+		t.Cleanup(func() { _ = kc.Delete(service, account) })
 
 		// 16 KB is past go-keyring's macOS 4 KB and Windows 2560 B caps: the
 		// failure case that motivates this library.
 		want := patternBytes(16 * 1024)
 
-		err := Set(service, account, want)
+		err := kc.Set(service, account, want)
 		if err != nil {
 			t.Fatalf("Set 16 KB: %v", err)
 		}
 
-		got, err := Get(service, account)
+		got, err := kc.Get(service, account)
 		if err != nil {
 			t.Fatalf("Get 16 KB: %v", err)
 		}
@@ -155,19 +156,19 @@ func runContract(t *testing.T, service string) {
 	t.Run("set is upsert, not duplicate", func(t *testing.T) {
 		const account = "upsert"
 
-		t.Cleanup(func() { _ = Delete(service, account) })
+		t.Cleanup(func() { _ = kc.Delete(service, account) })
 
-		err := Set(service, account, []byte("first"))
+		err := kc.Set(service, account, []byte("first"))
 		if err != nil {
 			t.Fatalf("first Set: %v", err)
 		}
 
-		err = Set(service, account, []byte("second"))
+		err = kc.Set(service, account, []byte("second"))
 		if err != nil {
 			t.Fatalf("second Set: %v", err)
 		}
 
-		got, err := Get(service, account)
+		got, err := kc.Get(service, account)
 		if err != nil {
 			t.Fatalf("Get: %v", err)
 		}
@@ -178,19 +179,19 @@ func runContract(t *testing.T, service string) {
 
 		// A single Delete must fully remove it; if the first Set had left a
 		// duplicate item, a stale value would remain readable here.
-		err = Delete(service, account)
+		err = kc.Delete(service, account)
 		if err != nil {
 			t.Fatalf("Delete after upsert: %v", err)
 		}
 
-		_, err = Get(service, account)
+		_, err = kc.Get(service, account)
 		if !errors.Is(err, ErrNotFound) {
 			t.Fatalf("item still present after upsert+delete, err = %v", err)
 		}
 	})
 
 	t.Run("get absent is ErrNotFound", func(t *testing.T) {
-		_, err := Get(service, "never-written")
+		_, err := kc.Get(service, "never-written")
 		if !errors.Is(err, ErrNotFound) {
 			t.Fatalf("Get absent: got %v, want ErrNotFound", err)
 		}
@@ -199,24 +200,24 @@ func runContract(t *testing.T, service string) {
 	t.Run("delete is idempotent", func(t *testing.T) {
 		const account = "idempotent-delete"
 
-		t.Cleanup(func() { _ = Delete(service, account) })
+		t.Cleanup(func() { _ = kc.Delete(service, account) })
 
-		err := Delete(service, account)
+		err := kc.Delete(service, account)
 		if err != nil {
 			t.Fatalf("Delete of absent item: got %v, want nil", err)
 		}
 
-		err = Set(service, account, []byte("x"))
+		err = kc.Set(service, account, []byte("x"))
 		if err != nil {
 			t.Fatalf("Set: %v", err)
 		}
 
-		err = Delete(service, account)
+		err = kc.Delete(service, account)
 		if err != nil {
 			t.Fatalf("first Delete: %v", err)
 		}
 
-		err = Delete(service, account)
+		err = kc.Delete(service, account)
 		if err != nil {
 			t.Fatalf("second Delete (idempotent): got %v, want nil", err)
 		}
@@ -225,14 +226,14 @@ func runContract(t *testing.T, service string) {
 	t.Run("empty secret is allowed and distinct from absent", func(t *testing.T) {
 		const account = "empty-secret"
 
-		t.Cleanup(func() { _ = Delete(service, account) })
+		t.Cleanup(func() { _ = kc.Delete(service, account) })
 
-		err := Set(service, account, []byte{})
+		err := kc.Set(service, account, []byte{})
 		if err != nil {
 			t.Fatalf("Set empty: %v", err)
 		}
 
-		got, err := Get(service, account)
+		got, err := kc.Get(service, account)
 		if err != nil {
 			t.Fatalf("Get empty: got %v, want a stored empty item", err)
 		}
