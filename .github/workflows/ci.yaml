@@ -27,7 +27,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache: true
 
       # golangci-lint only analyses the files built for the active GOOS, so lint
@@ -71,7 +71,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache: true
 
       # The library must cross-compile to every target with cgo disabled. This
@@ -105,7 +105,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache: true
 
       # bash on every runner (Git Bash on Windows) so the coverage flags parse
@@ -132,7 +132,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache: true
 
       # The integration tests mutate a real keychain, so point them at a
@@ -175,7 +175,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache: true
 
       # Credential Manager is per-user and needs no setup on the runner. The
@@ -203,7 +203,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache: true
 
       - name: Install gnome-keyring and dbus
@@ -319,7 +319,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache: true
 
       # A secret store should not ship on a dependency with a known vulnerability.
@@ -337,7 +337,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
-          go-version: '1.26.4'
+          go-version: '1.26.5'
           cache: true
 
       # The chunk container is the format-parsing core; fuzz it briefly on every
