@@ -293,7 +293,7 @@ jobs:
       # NetBSD build of the exact version instead; gnome-keyring and dbus still
       # come from pkgsrc.
       - name: Integration tests in a NetBSD VM
-        uses: vmactions/netbsd-vm@bf34bcd909bb50856f934a67d09a8fbe2b966a1b # v1.4.4
+        uses: vmactions/netbsd-vm@e7ac71b97abbe8437cec8859a5acf72dfa6a8be0 # v1.4.5
         with:
           usesh: true
           prepare: |
