@@ -293,10 +293,17 @@ jobs:
       # NetBSD build of the exact version instead; gnome-keyring and dbus still
       # come from pkgsrc.
       - name: Integration tests in a NetBSD VM
-        uses: vmactions/netbsd-vm@e7ac71b97abbe8437cec8859a5acf72dfa6a8be0 # v1.4.5
+        uses: vmactions/netbsd-vm@00081e82b14bc40114eb97f32b4455306828516b # v1.4.6
         with:
           usesh: true
           prepare: |
+            # NetBSD 11 ships a dbus package linked against libX11, which lives
+            # in the X sets rather than pkgsrc, and the VM image carries only
+            # the base sets. Without xbase pkg_add refuses with "missing
+            # required library: /usr/X11R7/lib/libX11.so.7".
+            ftp -o /tmp/xbase.tar.xz \
+              "https://cdn.netbsd.org/pub/NetBSD/NetBSD-$(uname -r)/amd64/binary/sets/xbase.tar.xz"
+            xzcat /tmp/xbase.tar.xz | tar -C / -xf -
             /usr/sbin/pkg_add gnome-keyring dbus curl
           run: |
             curl -L -o /tmp/go.tgz https://dl.google.com/go/go1.26.4.netbsd-amd64.tar.gz
