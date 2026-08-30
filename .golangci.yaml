@@ -5,6 +5,7 @@ linters:
   disable:
     - depguard
     - exhaustruct
+    - exhaustruct_v5
     - gochecknoinits
     - wsl
     - lll
@@ -14,6 +15,7 @@ linters:
     # Deprecated since v2.12; gomodguard_v2 (enabled via default: all)
     # replaces it. Keeping both active only produces a warning per run.
     - gomodguard
+    - gomodguard_v2
   settings:
     dupl:
       threshold: 100

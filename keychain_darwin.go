@@ -162,8 +162,8 @@ func failDarwin(err error) error {
 	// Classify the two conditions a caller needs to branch on: a headless prompt
 	// (errSecInteractionNotAllowed) as ErrLocked, and a partition/ACL denial
 	// (errSecAuthFailed, e.g. a rebuilt unsigned binary) as ErrAccessDenied.
-	var secErr *secitem.Error
-	if errors.As(err, &secErr) {
+	secErr, ok := errors.AsType[*secitem.Error](err)
+	if ok {
 		if secErr.Status == secitem.InteractionNotAllowed {
 			return fmt.Errorf("keychain: darwin: %w: %w", ErrLocked, err)
 		}
