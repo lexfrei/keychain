@@ -439,9 +439,11 @@ func TestCLIErrorNamesTheSubcommand(t *testing.T) {
 }
 
 // TestCLINotFoundClassification pins the absent-item mapping the public Get and
-// Delete depend on: security(1) reports errSecItemNotFound (-25300) as exit 44.
-// Measured on macOS 27.0: `security -i` propagates the failing subcommand's own
-// status unchanged, so the mapping is transport-independent.
+// Delete depend on: security(1) reports errSecItemNotFound (-25300) as exit 44,
+// and this maps it to errItemNotFound. It drives a fake spawn, so it covers the
+// classification and nothing about the tool; that the interactive mode really
+// does return a failing subcommand's own status is a claim about the tool and is
+// pinned against it by TestDarwinCLIPropagatesSubcommandStatus.
 func TestCLINotFoundClassification(t *testing.T) {
 	t.Parallel()
 
