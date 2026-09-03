@@ -29,7 +29,7 @@ func platformBackend() backend {
 
 func (b darwinBackend) set(service, account string, secret []byte, cfg config) error {
 	if cfg.securityCLI {
-		return cliSet(service, account, secret)
+		return securityTool{}.set(service, account, secret)
 	}
 
 	return b.apiSet(service, account, secret, cfg)
@@ -56,7 +56,7 @@ func (darwinBackend) apiSet(service, account string, secret []byte, cfg config) 
 
 func (b darwinBackend) get(service, account string, cfg config) ([]byte, error) {
 	if cfg.securityCLI {
-		return cliGet(service, account)
+		return securityTool{}.get(service, account)
 	}
 
 	return b.apiGet(service, account)
@@ -100,7 +100,7 @@ func (darwinBackend) apiGet(service, account string) ([]byte, error) {
 
 func (b darwinBackend) del(service, account string, cfg config) error {
 	if cfg.securityCLI {
-		return cliDel(service, account)
+		return securityTool{}.del(service, account)
 	}
 
 	return b.apiDel(service, account)
