@@ -19,8 +19,9 @@ import (
 // binary signed with the same stable Apple Team ID — reads without a prompt
 // across rebuilds, while an unsigned or ad-hoc-signed binary is bound to its
 // cdhash and loses access on rebuild (WithSecurityCLI is the escape hatch for
-// that case). The payload is a CFData, not a command-line argument, so there is
-// no size cap: the 16 KB secret round-trips as an ordinary item.
+// that case). The payload is a CFData rather than text the security tool has to
+// parse, so there is no size cap: the 16 KB secret round-trips as an ordinary
+// item.
 type darwinBackend struct{}
 
 func platformBackend() backend {
