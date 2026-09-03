@@ -13,3 +13,7 @@ globs:
 
 ignores:
   - "**/node_modules/**"
+  # Agent and editor scratch, not documentation this project publishes.
+  # Whatever a contributor keeps there would otherwise be linted locally and
+  # not in CI, which makes the two runs disagree over files nobody ships.
+  - ".claude/**"

@@ -21,8 +21,10 @@ func TestDarwinContract(t *testing.T) {
 
 // TestDarwinCLIContract runs the same contract against the security-CLI opt-in
 // backend (WithSecurityCLI), so both macOS code paths uphold the identical
-// behaviour. This path base64-transcodes the value, so the 16 KB NUL-containing
-// payload also proves the transcoding round-trips arbitrary bytes through argv.
+// behaviour. This path base64-transcodes the value and picks its transport by
+// size, so the contract covers both: the small values ride the security tool's
+// standard input, while the 16 KB NUL-containing payload is past the line that
+// tool reads and exercises the argv fallback.
 func TestDarwinCLIContract(t *testing.T) {
 	runContract(t, New(WithSecurityCLI()), uniqueService(t))
 }

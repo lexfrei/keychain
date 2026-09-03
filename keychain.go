@@ -141,9 +141,22 @@ func WithLogger(logger *slog.Logger) Option {
 // which changes on every rebuild, so a rebuilt unsigned binary can no longer
 // read what it stored. Items written through /usr/bin/security instead live in
 // the stable "apple-tool" access partition and stay readable across rebuilds and
-// across apps. The trade is that the secret is passed as a command-line argument
-// (briefly visible to the same user in the process list) — acceptable only
-// because such an item is already readable by any process of the user.
+// across apps. The trade is that any process of the user can then read the item
+// without a prompt.
+//
+// The value reaches the tool on its standard input, so it does not appear in
+// this process's argument list. security(1) says the same thing about the
+// alternative in its own usage text: "Use of the -p or -w options is insecure."
+//
+// Two cases still use the argument list, where the value is briefly visible to
+// the same user in ps: a secret whose base64 does not fit the roughly 4 KB line
+// the tool reads per command (about 3 KB of secret, less the length of the
+// service and account), and a service or account holding a newline, which one
+// line cannot carry. Exposure there is the lesser fault against storing a
+// truncated secret. The same tool buffer is what limits go-keyring on macOS,
+// which guards the identical command with ErrSetDataTooBig. A service or account
+// holding a NUL works on neither route, as it never did: Go rejects such an
+// argument before the process starts.
 //
 // It is a no-op on Linux and Windows, whose stores are user-scoped with no such
 // partitioning. A binary code-signed with a stable Apple Team ID does not need
