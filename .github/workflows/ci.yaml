@@ -245,7 +245,7 @@ jobs:
       # the VM's POSIX sh. The FreeBSD go package may lag, so GOTOOLCHAIN fetches
       # the version go.mod pins.
       - name: Integration tests in a FreeBSD VM
-        uses: vmactions/freebsd-vm@8b0f1a8fc0ea0def307835c258940ca358fe6480 # v1.5.6
+        uses: vmactions/freebsd-vm@4469451fe39bee80be4066836c5170362e9349f3 # v1.5.7
         with:
           usesh: true
           prepare: |
